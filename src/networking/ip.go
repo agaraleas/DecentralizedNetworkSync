@@ -1,22 +1,36 @@
 package networking
 
 import (
-	"log"
 	"net"
 )
 
-func getLocalIpThroughDialing(dialer *net.Dialer) net.IP {
-	conn, err := dialer.Dial("udp", "8.8.8.8:80")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer conn.Close()
+// dialer interface to abstract net.Dial and make it more testable
+type dialer interface {
+	Dial(network, address string) (net.Conn, error)
+}
 
-    localAddress := conn.LocalAddr().(*net.UDPAddr)
-    return localAddress.IP
+func getLocalIpThroughDialing(d dialer) (net.IP, error) {
+	conn, err := d.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	localAddress, ok := conn.LocalAddr().(*net.UDPAddr)
+    if !ok {
+        return nil, &net.AddrError{}
+    }
+
+	return localAddress.IP, nil
 }
 
 func GetLocalIP() net.IP {
 	var dialer net.Dialer
-    return getLocalIpThroughDialing(&dialer)
+    ip, err := getLocalIpThroughDialing(&dialer)
+
+    if err != nil {
+        panic(err)
+    }
+
+    return ip
 }

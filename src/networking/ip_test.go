@@ -2,36 +2,82 @@ package networking
 
 import (
 	"net"
+	"testing"
+	"time"
 
-	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-type MockDialer struct {
-	mock.Mock
+//Test case: Check that the obtained local IP is one of the network interfaces
+func isInterfaceContained(searchTarget net.IP, networkInterfaces []net.Addr) bool {
+	for _, interfaceAddress := range networkInterfaces {
+		if networkIp, ok := interfaceAddress.(*net.IPNet); ok {
+			if networkIp.IP.Equal(searchTarget) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
-func (m *MockDialer) Dial(network, address string) (net.Conn, error) {
-	args := m.Called(network, address)
-	return args.Get(0).(net.Conn), args.Error(1)
+func TestLocalIpRetrievalFromInterfaces(t *testing.T) {
+	interfaces, err := net.InterfaceAddrs()
+	require.Equal(t, err, nil, "Could not retrieve interfaces")
+
+	localIp := GetLocalIP()
+	assert.Equal(t, isInterfaceContained(localIp, interfaces), true, "local IP is missing from available interfaces")
 }
-// func TestGetLocalIp(t *testing.T) {
-// 	mockDialer := new(MockDialer)
-// 	fakeConn, _ := net.Pipe()
 
-// 	// Set up expectations for the Dial method
-// 	mockDialer.On("Dial", "udp", "8.8.8.8:80").Return(fakeConn, nil)
+//Test case: Test retriving of the local IP from a dummy UDP connection
+//We will mock the dialing service to be able to control its response
 
-// 	// Inject the mock dialer into the function
-// 	oldDialer := dialer
-// 	defer func() { dialer = oldDialer }()
-// 	dialer = mockDialer
+//brief: mockConn
+//struct which mocks a dialing connection, to be retured from the mockDialer
+type mockConn struct{}
 
-// 	// Call the function being tested
-// 	localIP := GetLocalIP()
+func (mc *mockConn) Read(b []byte) (n int, err error) {
+	return 0, nil
+}
 
-// 	// Assert the expected behavior
-// 	assert.Equal(t, net.IPv4(127, 0, 0, 1), localIP)
+func (mc *mockConn) Write(b []byte) (n int, err error) {
+	return 0, nil
+}
 
-// 	// Assert that the Dial method was called as expected
-// 	mockDialer.AssertExpectations(t)
-// }
+func (mc *mockConn) Close() error {
+	return nil
+}
+
+func (mc *mockConn) LocalAddr() net.Addr {
+	// Return a mock local address
+	return &net.UDPAddr{IP: net.IPv4(192, 168, 1, 10), Port: 12345}
+}
+
+func (mc *mockConn) RemoteAddr() net.Addr {
+	return nil
+}
+
+func (mc *mockConn) SetDeadline(t time.Time) error {
+	return nil
+}
+
+func (mc *mockConn) SetReadDeadline(t time.Time) error {
+	return nil
+}
+
+func (mc *mockConn) SetWriteDeadline(t time.Time) error {
+	return nil
+}
+
+type mockDialer struct{}
+
+func (md *mockDialer) Dial(network, address string) (net.Conn, error) {
+	return &mockConn{}, nil
+}
+func TestGetLocalIpThroughDialing(t *testing.T) {
+	mockDialer := &mockDialer{}
+	localIP, err := getLocalIpThroughDialing(mockDialer)
+	require.Equal(t, err, nil, "Error when dialing")
+	assert.Equal(t, net.IPv4(192, 168, 1, 10), localIP, "local IP obtained through dialing is not correct")
+}
