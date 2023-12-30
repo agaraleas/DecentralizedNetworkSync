@@ -2,12 +2,20 @@ package main
 
 import (
 	"fmt"
+	"os"
 
-	"github.com/agaraleas/DecentralizedNetworkSync/networking"
+	"github.com/agaraleas/DecentralizedNetworkSync/config"
+	"github.com/agaraleas/DecentralizedNetworkSync/logging"
 )
 
 func main() {
-	ip := networking.GetLocalIP()
-	dummyServer := networking.Server{Host: ip, Port: 0}
-	fmt.Printf("Hello from %s", dummyServer.ListeningAddress())
+	logging.InitLogging()
+
+	cmdLineParseResult := parseCommandLineArgs()
+	if cmdLineParseResult != nil {
+		fmt.Println(cmdLineParseResult.msg)
+		os.Exit(int(cmdLineParseResult.code))
+	}
+
+	fmt.Printf("Configured to listen on port %d\n", config.GlobalConfig.Port)
 }
