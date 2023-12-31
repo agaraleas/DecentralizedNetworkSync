@@ -3,6 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
+	"strconv"
+	"strings"
 
 	"github.com/agaraleas/DecentralizedNetworkSync/config"
 	"github.com/agaraleas/DecentralizedNetworkSync/logging"
@@ -47,7 +50,8 @@ func handleCommandLineArgValues(args []CmdLineArg) *CmdLineArgError {
 func gatherCommandLineArgTemplates() []CmdLineArg {
 	var argTemplates []CmdLineArg
 	argTemplates = append(argTemplates, &helpCmdLineArg{})
-	argTemplates = append(argTemplates, &portCmdLineArg{})
+	argTemplates = append(argTemplates, &driverCmdLineArg{})
+	argTemplates = append(argTemplates, &listenCmdLineArg{})
 	return argTemplates
 }
 
@@ -76,54 +80,120 @@ func createHelpMessage() string {
 	return msg
 }
 
-//Cmd Line Arg: Port
-type portCmdLineArg struct{
+//Cmd Line Arg: Driver
+type driverCmdLineArg struct{
+	host string
 	port int
+	ticket string
 }
 
-func (arg *portCmdLineArg) register() {
-	flag.IntVar(&arg.port, "p", 0, "Port number")
-	flag.IntVar(&arg.port, "port", 0, "Port number")
+func (arg *driverCmdLineArg) register() {
+	flag.StringVar(&arg.host, "driver-host", "", "Address of host App which drives Syncer")
+	flag.IntVar(&arg.port, "driver-port", 0, "Port which host app listens")
+	flag.StringVar(&arg.ticket, "driver-ticket", "", "Ticket to connect to host app")
 }
 
-func (arg *portCmdLineArg) handle() *CmdLineArgError {
-	if !parseListeningPort(arg.port) {
-		logging.Log.Error("Failed to parse listening port")
-		errMsg := "Cannot listen to given port: " + fmt.Sprint(arg.port)
-		return &CmdLineArgError{msg: errMsg, code: CantListenToPortError}
+func (arg *driverCmdLineArg) handle() *CmdLineArgError {
+	if !parseDriverHost(arg.host) {
+		logging.Log.Error("Failed to parse driver host")
+		errMsg := fmt.Sprintf("Error in parsing arg --driver-host. Invalid host: %s", arg.host)
+		return &CmdLineArgError{msg: errMsg, code: InvalidHostError}
 	}
+	if !parseDriverPort(arg.port) {
+		logging.Log.Error("Failed to parse driver port")
+		errMsg := "Error in parsing arg --driver-port. Invalid port: " + fmt.Sprint(arg.port)
+		return &CmdLineArgError{msg: errMsg, code: InvalidPortError}
+	}
+	config.GlobalConfig.DriverInfo.Ticket = arg.ticket
 	return nil
 }
 
-func parseListeningPort(suggestedPortNum int) bool {
-	if suggestedPortNum < 0 || suggestedPortNum > networking.HighestAvailablePort {
+func parseDriverPort(suggestedPortNum int) bool {
+	if suggestedPortNum <= 0 || suggestedPortNum > networking.HighestAvailablePort {
+		logging.Log.Errorf("Port parsing failed. Port %d is not valid", suggestedPortNum)
 		return false
 	}
 
-	if suggestedPortNum > 0 {
-		portToTest := networking.Port(suggestedPortNum)
-		if !networking.IsPortFree(portToTest){
-			logging.Log.Warningf("Port parsing failed. Port %d is not free", portToTest)
-			return false
-		}
-	}
-
-	port := networking.Port(suggestedPortNum)
-	if port == 0 {
-		var err error
-		if port, err = networking.FindFreePort(); err != nil {
-			logging.Log.Warning("Port parsing failed. Could not find free port")
-			return false
-		}
-	}
-
-	logging.Log.Debugf("Setting application port to %d", port)
-	config.GlobalConfig.Port = port
+	logging.Log.Debugf("Setting application port to %d", suggestedPortNum)
+	config.GlobalConfig.DriverInfo.Address.Port = networking.Port(suggestedPortNum)
 	return true
 }
 
+func parseDriverHost(host string) bool {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		logging.Log.Errorf("Host parsing failed. Host %s is not valid", host)
+		return false
+	}
 
+	config.GlobalConfig.DriverInfo.Address.Host = ip
+	return true
+}
 
+//Cmd Line Arg: listen
+type listenCmdLineArg struct{
+	address string
+}
+
+func (arg *listenCmdLineArg) register() {
+	flag.StringVar(&arg.address, "listen", "", "Address which Syncer listens")
+}
+
+func (arg *listenCmdLineArg) handle() *CmdLineArgError {
+	if arg.address == ""{
+		logging.Log.Error("Listen parsing failed. Listen address not provided")
+		return &CmdLineArgError{msg: "Error in arg --listen. Listen address not provided", 
+		                        code: CantListenToPortError}
+	}
+
+	addressComponents := strings.SplitN(arg.address, ":", 2)
+	if len(addressComponents) != 2 {
+		logging.Log.Errorf("Listen parsing failed. Address %s does not hold valid format x.x.x.x:ppppp", arg.address)
+		return &CmdLineArgError{msg: "Error in parsing arg --listen. Invalid listen address", 
+		                        code: CantListenToPortError}
+	}
+
+	if addressComponents[0] == ""{
+		addressComponents[0] = "127.0.0.1"
+	}
+
+	ip := net.ParseIP(addressComponents[0])
+	if ip == nil {
+		logging.Log.Errorf("Listening to %s failed. Host %s is not a valid IP", arg.address, addressComponents[0])
+		return &CmdLineArgError{msg: "Error in parsing arg --listen. Invalid listen address", 
+		                        code: CantListenToPortError}
+	}
+
+	port, err := parseListenPort(addressComponents[1])
+	if err != nil {
+		logging.Log.Errorf("Listening to port %s failed. %s", addressComponents[1], err)
+		return &CmdLineArgError{msg: fmt.Sprintf("Error in parsing arg --listen. %s", err.Error()), 
+		                        code: CantListenToPortError}
+	}
+
+	config.GlobalConfig.ListenAddress.Host = ip
+	config.GlobalConfig.ListenAddress.Port = port
+	return nil
+}
+
+func parseListenPort(portText string) (networking.Port, error) {
+	portNum, err := strconv.Atoi(portText)
+	if err != nil {
+		return 0, fmt.Errorf("Invalid port number")
+	}
+
+	if portNum <= 0 || portNum > networking.HighestAvailablePort {
+		return 0, fmt.Errorf("Invalid port number")
+	}
+
+	port := networking.Port(portNum)
+	if !networking.IsPortFree(port){
+		return 0, fmt.Errorf("Port is not free")
+	}
+
+	logging.Log.Debugf("Setting application port to %d", port)
+	return port, nil
+}
 
 
 

@@ -17,5 +17,12 @@ func main() {
 		os.Exit(int(cmdLineParseResult.code))
 	}
 
-	fmt.Printf("Configured to listen on port %d\n", config.GlobalConfig.Port)
+	fmt.Printf("Configured to connect to driver %s:%d with ticket %s\n", 
+	    config.GlobalConfig.DriverInfo.Address.Host,
+	    config.GlobalConfig.DriverInfo.Address.Port,
+		config.GlobalConfig.DriverInfo.Ticket)
+
+	fmt.Printf("Configured to listen on address %s:%d", 
+	    config.GlobalConfig.ListenAddress.Host, 
+		config.GlobalConfig.ListenAddress.Port)
 }

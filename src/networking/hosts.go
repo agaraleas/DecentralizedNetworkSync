@@ -7,7 +7,7 @@ import (
 
 type Server struct {
 	Host net.IP
-	Port uint16
+	Port Port
 }
 
 func (s* Server) ListeningAddress() string {
