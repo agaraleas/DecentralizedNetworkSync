@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+
 	"github.com/agaraleas/DecentralizedNetworkSync/logging"
 	"github.com/agaraleas/DecentralizedNetworkSync/networking"
 )
@@ -41,9 +43,16 @@ func (f Footprint) String() string {
 	return fmt.Sprintf("footprint_%s_%d_%d", f.Hostname, f.Port, f.Pid)
 }
 
-func (f Footprint) toFile() error {
-	filename := f.String() + ".json"
-	file, err := os.Create(filename)
+func (f Footprint) ToFile(folderPath string) error {
+	_, err := os.Stat(folderPath)
+	if os.IsNotExist(err) {
+		logging.Log.Errorf("Path %s does not exist", folderPath)
+		return err
+	}
+	
+	fileName := f.String() + ".json"
+	filePath := filepath.Join(folderPath, fileName)
+	file, err := os.Create(filePath)
 	if err != nil {
 		return err
 	}
@@ -53,8 +62,8 @@ func (f Footprint) toFile() error {
 	return encoder.Encode(f)
 }
 
-func (f *Footprint) fromFile(filename string) error {
-	file, err := os.Open(filename)
+func (f *Footprint) FromFile(filePath string) error {
+	file, err := os.Open(filePath)
 	if err != nil {
 		return err
 	}

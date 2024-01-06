@@ -2,8 +2,9 @@ package cluster
 
 import (
 	"os"
-	"testing"
+	"path/filepath"
 	"reflect"
+	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,19 +28,19 @@ func TestFootprintFile(t *testing.T) {
 		Pid: 1234,
 	}
 
-	err := expectedFootprint.toFile()
+	folderPath := os.TempDir()
+	err := expectedFootprint.ToFile(folderPath)
 	require.Nil(t, err, "Failed to write Footprint to file")
 
-	filename := expectedFootprint.String() + ".json"
-	_, err = os.Stat(filename)
-	require.False(t, os.IsNotExist(err), "File does not exist")
+	fileName := expectedFootprint.String() + ".json"
+	filePath := filepath.Join(folderPath, fileName)
 
 	var footprint Footprint
-	err = footprint.fromFile(filename)
+	err = footprint.FromFile(filePath)
 	assert.Nil(t, err, "Failed to read Footprint from file")
 
 	assert.True(t, reflect.DeepEqual(footprint, expectedFootprint), "Footprints are not equal")
 
-	err = os.Remove(filename)
+	err = os.Remove(filePath)
 	require.Nil(t, err, "Failed to delete Footprint file")
 }
