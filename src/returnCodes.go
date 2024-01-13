@@ -7,4 +7,5 @@ const (
 	CantListenToPortError
 	InvalidHostError
 	InvalidPortError
+	InvalidSharedFolderError
 )

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 
@@ -12,9 +13,9 @@ import (
 	"github.com/agaraleas/DecentralizedNetworkSync/networking"
 )
 
-//Interface for generic Command Line Argument handling
+// Interface for generic Command Line Argument handling
 type CmdLineArgError struct {
-	msg string
+	msg  string
 	code ReturnCode
 }
 
@@ -26,7 +27,7 @@ type CmdLineArg interface {
 func parseCommandLineArgs() *CmdLineArgError {
 	args := gatherCommandLineArgTemplates()
 
-	for _, arg := range(args){
+	for _, arg := range args {
 		arg.register()
 	}
 
@@ -36,27 +37,28 @@ func parseCommandLineArgs() *CmdLineArgError {
 }
 
 func handleCommandLineArgValues(args []CmdLineArg) *CmdLineArgError {
-	for _, arg := range(args){
+	for _, arg := range args {
 		err := arg.handle()
 
 		if err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
 func gatherCommandLineArgTemplates() []CmdLineArg {
 	var argTemplates []CmdLineArg
 	argTemplates = append(argTemplates, &helpCmdLineArg{})
+	argTemplates = append(argTemplates, &sharedFolderCmdLineArg{})
 	argTemplates = append(argTemplates, &driverCmdLineArg{})
 	argTemplates = append(argTemplates, &listenCmdLineArg{})
 	return argTemplates
 }
 
-//Cmd Line Arg: Help
-type helpCmdLineArg struct{
+// Cmd Line Arg: Help
+type helpCmdLineArg struct {
 	help bool
 }
 
@@ -75,15 +77,53 @@ func (arg *helpCmdLineArg) handle() *CmdLineArgError {
 
 func createHelpMessage() string {
 	msg := "==== DECENTRALIZED NETWORK SYNCER ====\n" +
-	       "Synchronizes access to network resources by coordinating\n" +
-		   "access requests with other active syncers in local network"
+		"Synchronizes access to network resources by coordinating\n" +
+		"access requests with other active syncers in local network"
 	return msg
 }
 
-//Cmd Line Arg: Driver
-type driverCmdLineArg struct{
-	host string
-	port int
+// Cmd Line Arg: Shared Folder
+type sharedFolderCmdLineArg struct {
+	sharedFolderPath string
+}
+
+func (arg *sharedFolderCmdLineArg) register() {
+	flag.StringVar(&arg.sharedFolderPath, "shared-folder", "", "Shared folder path for Syncers' communication")
+}
+
+func (arg *sharedFolderCmdLineArg) handle() *CmdLineArgError {
+	if arg.sharedFolderPath == "" {
+		errorMessage := fmt.Sprintf("Shared folder path cannot be empty")
+		logging.Log.Error(errorMessage)
+		return &CmdLineArgError{msg: errorMessage, code: InvalidSharedFolderError}
+	}
+
+	fileInfo, err := os.Stat(arg.sharedFolderPath)
+	if err != nil {
+		var errorMessage string
+		if os.IsNotExist(err) {
+			errorMessage = fmt.Sprintf("Shared folder path does not exist: %s", arg.sharedFolderPath)
+		} else {
+			errorMessage = fmt.Sprintf("Invalid shared folder path: %v", err)
+		}
+		logging.Log.Error(errorMessage)
+		return &CmdLineArgError{msg: errorMessage, code: InvalidSharedFolderError}
+	}
+
+	if !fileInfo.IsDir() {
+		errorMessage := fmt.Sprintf("Shared folder path does not point to a directory: %s", arg.sharedFolderPath)
+		logging.Log.Error(errorMessage)
+		return &CmdLineArgError{msg: errorMessage, code: InvalidSharedFolderError}
+	}
+
+	config.GlobalConfig.SharedFolder = arg.sharedFolderPath
+	return nil
+}
+
+// Cmd Line Arg: Driver
+type driverCmdLineArg struct {
+	host   string
+	port   int
 	ticket string
 }
 
@@ -130,8 +170,8 @@ func parseDriverHost(host string) bool {
 	return true
 }
 
-//Cmd Line Arg: listen
-type listenCmdLineArg struct{
+// Cmd Line Arg: listen
+type listenCmdLineArg struct {
 	address string
 }
 
@@ -140,35 +180,35 @@ func (arg *listenCmdLineArg) register() {
 }
 
 func (arg *listenCmdLineArg) handle() *CmdLineArgError {
-	if arg.address == ""{
+	if arg.address == "" {
 		logging.Log.Error("Listen parsing failed. Listen address not provided")
-		return &CmdLineArgError{msg: "Error in arg --listen. Listen address not provided", 
-		                        code: CantListenToPortError}
+		return &CmdLineArgError{msg: "Error in arg --listen. Listen address not provided",
+			code: CantListenToPortError}
 	}
 
 	addressComponents := strings.SplitN(arg.address, ":", 2)
 	if len(addressComponents) != 2 {
 		logging.Log.Errorf("Listen parsing failed. Address %s does not hold valid format x.x.x.x:ppppp", arg.address)
-		return &CmdLineArgError{msg: "Error in parsing arg --listen. Invalid listen address", 
-		                        code: CantListenToPortError}
+		return &CmdLineArgError{msg: "Error in parsing arg --listen. Invalid listen address",
+			code: CantListenToPortError}
 	}
 
-	if addressComponents[0] == ""{
+	if addressComponents[0] == "" {
 		addressComponents[0] = "127.0.0.1"
 	}
 
 	ip := net.ParseIP(addressComponents[0])
 	if ip == nil {
 		logging.Log.Errorf("Listening to %s failed. Host %s is not a valid IP", arg.address, addressComponents[0])
-		return &CmdLineArgError{msg: "Error in parsing arg --listen. Invalid listen address", 
-		                        code: CantListenToPortError}
+		return &CmdLineArgError{msg: "Error in parsing arg --listen. Invalid listen address",
+			code: CantListenToPortError}
 	}
 
 	port, err := parseListenPort(addressComponents[1])
 	if err != nil {
 		logging.Log.Errorf("Listening to port %s failed. %s", addressComponents[1], err)
-		return &CmdLineArgError{msg: fmt.Sprintf("Error in parsing arg --listen. %s", err.Error()), 
-		                        code: CantListenToPortError}
+		return &CmdLineArgError{msg: fmt.Sprintf("Error in parsing arg --listen. %s", err.Error()),
+			code: CantListenToPortError}
 	}
 
 	config.GlobalConfig.ListenAddress.Host = ip
@@ -187,15 +227,10 @@ func parseListenPort(portText string) (networking.Port, error) {
 	}
 
 	port := networking.Port(portNum)
-	if !networking.IsPortFree(port){
+	if !networking.IsPortFree(port) {
 		return 0, fmt.Errorf("Port is not free")
 	}
 
 	logging.Log.Debugf("Setting application port to %d", port)
 	return port, nil
 }
-
-
-
-
-

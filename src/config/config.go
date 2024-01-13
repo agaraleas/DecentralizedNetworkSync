@@ -8,7 +8,7 @@ import (
 var GlobalConfig AppConfig
 
 type AppConfig struct {
-	DriverInfo driver.DriverConnectInfo
+	DriverInfo    driver.DriverConnectInfo
 	ListenAddress networking.Server
+	SharedFolder  string
 }
-

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"os"
 	"testing"
 
 	"github.com/agaraleas/DecentralizedNetworkSync/config"
@@ -16,20 +17,24 @@ import (
 
 func TestGatherCommandLineArgTemplates(t *testing.T) {
 	args := gatherCommandLineArgTemplates()
-	
+
 	index := 0
 	_, hasCorrectType := args[index].(*helpCmdLineArg)
 	assert.True(t, hasCorrectType, fmt.Sprintf("Index %d has unexpected type instead of helpCmdLineArg", index))
-	
+
+	index += 1
+	_, hasCorrectType = args[index].(*sharedFolderCmdLineArg)
+	assert.True(t, hasCorrectType, fmt.Sprintf("Index %d has unexpected type instead of sharedFolderCmdLineArg", index))
+
 	index += 1
 	_, hasCorrectType = args[index].(*driverCmdLineArg)
 	assert.True(t, hasCorrectType, fmt.Sprintf("Index %d has unexpected type instead of driverCmdLineArg", index))
-	
+
 	index += 1
 	_, hasCorrectType = args[index].(*listenCmdLineArg)
 	assert.True(t, hasCorrectType, fmt.Sprintf("Index %d has unexpected type instead of listenCmdLineArg", index))
 
-	assert.Equal(t, len(args), index + 1) //So as when adding a new cmd line arg, not forget to add a test
+	assert.Equal(t, len(args), index+1) //So as when adding a new cmd line arg, not forget to add a test
 }
 
 func TestHelpCmdLineArgRegistering(t *testing.T) {
@@ -120,7 +125,7 @@ func TestDriverCmdLineArgHandling(t *testing.T) {
 	assert.Equal(t, config.GlobalConfig.DriverInfo.Address.Port, networking.Port(55555))
 }
 
-func TestHandleCommandLineArgValues(t *testing.T){
+func TestHandleCommandLineArgValues(t *testing.T) {
 	//Lets mock the cmd line args by adding one that always succeeds
 	var cmdArgs []CmdLineArg
 	cmdArgs = append(cmdArgs, &successCmdLineArgMock{})
@@ -135,13 +140,17 @@ func TestHandleCommandLineArgValues(t *testing.T){
 	assert.Equal(t, outcome.code, NormalExit)
 }
 
-type successCmdLineArgMock struct {}
-func (arg *successCmdLineArgMock) register() {}
+type successCmdLineArgMock struct{}
+
+func (arg *successCmdLineArgMock) register()                {}
 func (arg *successCmdLineArgMock) handle() *CmdLineArgError { return nil }
 
-type failedCmdLineArgMock struct {}
+type failedCmdLineArgMock struct{}
+
 func (arg *failedCmdLineArgMock) register() {}
-func (arg *failedCmdLineArgMock) handle() *CmdLineArgError { return &CmdLineArgError{msg: "error", code: NormalExit} }
+func (arg *failedCmdLineArgMock) handle() *CmdLineArgError {
+	return &CmdLineArgError{msg: "error", code: NormalExit}
+}
 
 func TestListenCmdLineArgHandling(t *testing.T) {
 	logLevel := logging.Log.GetLevel()
@@ -200,7 +209,7 @@ func TestListenCmdLineArgHandling(t *testing.T) {
 	listener, err := net.Listen("tcp", listeningAddress)
 	assert.Nil(t, err, "FindFreePort returned a non free port")
 	defer listener.Close()
-	
+
 	previousGlobal = config.GlobalConfig.ListenAddress
 	listenArg = listenCmdLineArg{address: listeningAddress}
 	outcome = listenArg.handle()
@@ -217,4 +226,46 @@ func TestListenCmdLineArgHandling(t *testing.T) {
 	assert.Equal(t, outcome.msg, "Error in arg --listen. Listen address not provided")
 	assert.Equal(t, outcome.code, CantListenToPortError)
 	assert.Equal(t, previousGlobal, config.GlobalConfig.ListenAddress)
+}
+
+func TestSharedFolderCmdLineArgHandling(t *testing.T) {
+	logLevel := logging.Log.GetLevel()
+	logging.Log.SetLevel(logrus.FatalLevel)
+	defer logging.Log.SetLevel(logLevel)
+
+	// Empty path
+	sharedFolderArg := sharedFolderCmdLineArg{sharedFolderPath: ""}
+	outcome := sharedFolderArg.handle()
+	previousGlobal := config.GlobalConfig.SharedFolder
+	assert.NotNil(t, outcome, "Hanlding of empty path did not result in an error")
+	assert.Equal(t, outcome.msg, "Shared folder path cannot be empty")
+	assert.Equal(t, outcome.code, InvalidSharedFolderError)
+	assert.Equal(t, config.GlobalConfig.SharedFolder, previousGlobal)
+
+	// Invalid path
+	sharedFolderArg = sharedFolderCmdLineArg{sharedFolderPath: "//invalid/path"}
+	outcome = sharedFolderArg.handle()
+	previousGlobal = config.GlobalConfig.SharedFolder
+	assert.NotNil(t, outcome, "Hanlding of invalid path did not result in an error")
+	assert.Equal(t, outcome.code, InvalidSharedFolderError)
+	assert.Equal(t, config.GlobalConfig.SharedFolder, previousGlobal)
+
+	// Non directory path
+	tempFile, err := os.CreateTemp("", "temp_file")
+	require.Nil(t, err, "Failed to create temporary file")
+	defer os.Remove(tempFile.Name())
+	sharedFolderArg = sharedFolderCmdLineArg{sharedFolderPath: tempFile.Name()}
+	outcome = sharedFolderArg.handle()
+	previousGlobal = config.GlobalConfig.SharedFolder
+	assert.NotNil(t, outcome, "Hanlding of path not pointing to directory did not result in an error")
+	assert.Equal(t, outcome.msg, fmt.Sprintf("Shared folder path does not point to a directory: %s", tempFile.Name()))
+	assert.Equal(t, outcome.code, InvalidSharedFolderError)
+	assert.Equal(t, config.GlobalConfig.SharedFolder, previousGlobal)
+
+	// Valid directory path
+	tempFolderPath := os.TempDir()
+	sharedFolderArg = sharedFolderCmdLineArg{sharedFolderPath: tempFolderPath}
+	outcome = sharedFolderArg.handle()
+	assert.Nil(t, outcome, "Hanlding of shared folder cmd line arg returned error")
+	assert.Equal(t, config.GlobalConfig.SharedFolder, tempFolderPath)
 }
