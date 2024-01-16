@@ -128,7 +128,7 @@ type driverCmdLineArg struct {
 }
 
 func (arg *driverCmdLineArg) register() {
-	flag.StringVar(&arg.host, "driver-host", "", "Address of host App which drives Syncer")
+	flag.StringVar(&arg.host, "driver-host", "localhost", "Address of host App which drives Syncer")
 	flag.IntVar(&arg.port, "driver-port", 0, "Port which host app listens")
 	flag.StringVar(&arg.ticket, "driver-ticket", "", "Ticket to connect to host app")
 }

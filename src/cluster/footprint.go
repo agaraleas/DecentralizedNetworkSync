@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/agaraleas/DecentralizedNetworkSync/logging"
 	"github.com/agaraleas/DecentralizedNetworkSync/networking"
 )
 
+const FootprintFileNamePrefix = "footprint"
+
 type Footprint struct {
-	Port networking.Port `json:"port"`
-	Hostname string		 `json:"hostname"`
-	Pid int				 `json:"pid"`
+	Port     networking.Port `json:"port"`
+	Hostname string          `json:"hostname"`
+	Pid      int             `json:"pid"`
 }
 
 func NewFootprint() (*Footprint, error) {
@@ -32,26 +35,26 @@ func NewFootprint() (*Footprint, error) {
 	pid := os.Getpid()
 
 	footprint := Footprint{
-		Port: networking.Port(port),
+		Port:     networking.Port(port),
 		Hostname: hostname,
-		Pid: pid,
+		Pid:      pid,
 	}
 	return &footprint, nil
 }
 
 func (f Footprint) String() string {
-	return fmt.Sprintf("footprint_%s_%d_%d", f.Hostname, f.Port, f.Pid)
+	return fmt.Sprintf("%s_%s_%d_%d", FootprintFileNamePrefix, f.Hostname, f.Port, f.Pid)
 }
 
-func (f Footprint) ToFile(folderPath string) error {
-	_, err := os.Stat(folderPath)
+func (f Footprint) ToFile(dirPath string) error {
+	_, err := os.Stat(dirPath)
 	if os.IsNotExist(err) {
-		logging.Log.Errorf("Path %s does not exist", folderPath)
+		logging.Log.Errorf("Path %s does not exist", dirPath)
 		return err
 	}
-	
+
 	fileName := f.String() + ".json"
-	filePath := filepath.Join(folderPath, fileName)
+	filePath := filepath.Join(dirPath, fileName)
 	file, err := os.Create(filePath)
 	if err != nil {
 		return err
@@ -71,4 +74,35 @@ func (f *Footprint) FromFile(filePath string) error {
 
 	decoder := json.NewDecoder(file)
 	return decoder.Decode(f)
+}
+
+func ContainsFootprintFiles(dirPath string) (bool, error) {
+	fileInfo, err := os.Stat(dirPath)
+	if err != nil {
+		logging.Log.Errorf("Failed to get info of directory: %s", dirPath)
+		return false, err
+	}
+
+	if !fileInfo.IsDir() {
+		logging.Log.Errorf("Path %s does not point to a directory", dirPath)
+		return false, err
+	}
+
+	dirEntries, err := os.ReadDir(dirPath)
+	if err != nil {
+		logging.Log.Errorf("Failed to get entries of %s", dirPath)
+		return false, err
+	}
+
+	for _, entry := range dirEntries {
+		if !entry.IsDir() && IsFootprintFile(entry.Name()) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func IsFootprintFile(fileName string) bool {
+	return strings.HasPrefix(fileName, FootprintFileNamePrefix)
 }
