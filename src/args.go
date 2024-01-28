@@ -159,7 +159,7 @@ func parseDriverPort(suggestedPortNum int) bool {
 func parseDriverHost(host string) bool {
 	ipAddr, err := net.ResolveIPAddr("ip", host)
 	if err == nil {
-		config.GlobalConfig.DriverInfo.Address.Host = ipAddr.IP
+		config.GlobalConfig.DriverInfo.Address.Host = ipAddr.IP.To16()
 		return true
 	}
 
