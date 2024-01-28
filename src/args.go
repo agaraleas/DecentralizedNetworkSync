@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strconv"
-	"strings"
 
 	"github.com/agaraleas/DecentralizedNetworkSync/config"
 	"github.com/agaraleas/DecentralizedNetworkSync/logging"
@@ -53,7 +51,6 @@ func gatherCommandLineArgTemplates() []CmdLineArg {
 	argTemplates = append(argTemplates, &helpCmdLineArg{})
 	argTemplates = append(argTemplates, &sharedFolderCmdLineArg{})
 	argTemplates = append(argTemplates, &driverCmdLineArg{})
-	argTemplates = append(argTemplates, &listenCmdLineArg{})
 	return argTemplates
 }
 
@@ -160,77 +157,18 @@ func parseDriverPort(suggestedPortNum int) bool {
 }
 
 func parseDriverHost(host string) bool {
+	ipAddr, err := net.ResolveIPAddr("ip", host)
+	if err == nil {
+		config.GlobalConfig.DriverInfo.Address.Host = ipAddr.IP
+		return true
+	}
+
 	ip := net.ParseIP(host)
-	if ip == nil {
-		logging.Log.Errorf("Host parsing failed. Host %s is not valid", host)
-		return false
+	if ip != nil {
+		config.GlobalConfig.DriverInfo.Address.Host = ip
+		return true
 	}
 
-	config.GlobalConfig.DriverInfo.Address.Host = ip
-	return true
-}
-
-// Cmd Line Arg: listen
-type listenCmdLineArg struct {
-	address string
-}
-
-func (arg *listenCmdLineArg) register() {
-	flag.StringVar(&arg.address, "listen", "", "Address which Syncer listens")
-}
-
-func (arg *listenCmdLineArg) handle() *CmdLineArgError {
-	if arg.address == "" {
-		logging.Log.Error("Listen parsing failed. Listen address not provided")
-		return &CmdLineArgError{msg: "Error in arg --listen. Listen address not provided",
-			code: CantListenToPortError}
-	}
-
-	addressComponents := strings.SplitN(arg.address, ":", 2)
-	if len(addressComponents) != 2 {
-		logging.Log.Errorf("Listen parsing failed. Address %s does not hold valid format x.x.x.x:ppppp", arg.address)
-		return &CmdLineArgError{msg: "Error in parsing arg --listen. Invalid listen address",
-			code: CantListenToPortError}
-	}
-
-	if addressComponents[0] == "" {
-		addressComponents[0] = "127.0.0.1"
-	}
-
-	ip := net.ParseIP(addressComponents[0])
-	if ip == nil {
-		logging.Log.Errorf("Listening to %s failed. Host %s is not a valid IP", arg.address, addressComponents[0])
-		return &CmdLineArgError{msg: "Error in parsing arg --listen. Invalid listen address",
-			code: CantListenToPortError}
-	}
-
-	port, err := parseListenPort(addressComponents[1])
-	if err != nil {
-		logging.Log.Errorf("Listening to port %s failed. %s", addressComponents[1], err)
-		return &CmdLineArgError{msg: fmt.Sprintf("Error in parsing arg --listen. %s", err.Error()),
-			code: CantListenToPortError}
-	}
-
-	config.GlobalConfig.ListenAddress.Host = ip
-	config.GlobalConfig.ListenAddress.Port = port
-	return nil
-}
-
-func parseListenPort(portText string) (networking.Port, error) {
-	portNum, err := strconv.Atoi(portText)
-	if err != nil {
-		return 0, fmt.Errorf("Invalid port number")
-	}
-
-	if portNum <= 0 || portNum > networking.HighestAvailablePort {
-		return 0, fmt.Errorf("Invalid port number")
-	}
-
-	port := networking.Port(portNum)
-	if !networking.IsPortFree(port) {
-		return 0, fmt.Errorf("Port is not free")
-	}
-
-	logging.Log.Debugf("Setting application port to %d", port)
-	return port, nil
+	logging.Log.Errorf("Host parsing failed. Host %s is not valid", host)
+	return false
 }

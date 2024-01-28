@@ -30,10 +30,6 @@ func TestGatherCommandLineArgTemplates(t *testing.T) {
 	_, hasCorrectType = args[index].(*driverCmdLineArg)
 	assert.True(t, hasCorrectType, fmt.Sprintf("Index %d has unexpected type instead of driverCmdLineArg", index))
 
-	index += 1
-	_, hasCorrectType = args[index].(*listenCmdLineArg)
-	assert.True(t, hasCorrectType, fmt.Sprintf("Index %d has unexpected type instead of listenCmdLineArg", index))
-
 	assert.Equal(t, len(args), index+1) //So as when adding a new cmd line arg, not forget to add a test
 }
 
@@ -91,12 +87,12 @@ func TestDriverCmdLineArgHandling(t *testing.T) {
 
 	//Empty host
 	previousDriver = config.GlobalConfig.DriverInfo
-	driverArg = driverCmdLineArg{port: 23456, ticket: "qwerty"}
+	driverArg = driverCmdLineArg{host: "localhost", port: 12345, ticket: "abcd"}
 	outcome = driverArg.handle()
-	require.NotNil(t, outcome, "Expected error in handling of invalid host but got nil")
-	assert.Equal(t, outcome.msg, "Error in parsing arg --driver-host. Invalid host: ")
-	assert.Equal(t, outcome.code, InvalidHostError)
-	assert.Equal(t, config.GlobalConfig.DriverInfo, previousDriver)
+	assert.Nil(t, outcome, "Hanlding of driver cmd line arg returned error")
+	assert.Equal(t, net.IPv4(127, 0, 0, 1), config.GlobalConfig.DriverInfo.Address.Host)
+	assert.Equal(t, networking.Port(12345), config.GlobalConfig.DriverInfo.Address.Port)
+	assert.Equal(t, "abcd", config.GlobalConfig.DriverInfo.Ticket)
 
 	//Negative port
 	previousDriver = config.GlobalConfig.DriverInfo
@@ -150,82 +146,6 @@ type failedCmdLineArgMock struct{}
 func (arg *failedCmdLineArgMock) register() {}
 func (arg *failedCmdLineArgMock) handle() *CmdLineArgError {
 	return &CmdLineArgError{msg: "error", code: NormalExit}
-}
-
-func TestListenCmdLineArgHandling(t *testing.T) {
-	logLevel := logging.Log.GetLevel()
-	logging.Log.SetLevel(logrus.FatalLevel)
-	defer logging.Log.SetLevel(logLevel)
-
-	//Get a free port
-	freePort, err := networking.FindFreePort()
-	require.Nil(t, err, "Failed to get a free port to continue with actual test")
-
-	//provide a valid listening address
-	listenArg := listenCmdLineArg{address: fmt.Sprintf("192.168.101.1:%d", freePort)}
-	outcome := listenArg.handle()
-	assert.Nil(t, outcome, "Hanlding of listen cmd line arg returned error")
-	assert.Equal(t, config.GlobalConfig.ListenAddress.Host, net.IPv4(192, 168, 101, 1))
-	assert.Equal(t, config.GlobalConfig.ListenAddress.Port, freePort)
-
-	//provide a short localhost address
-	listenArg = listenCmdLineArg{address: fmt.Sprintf(":%d", freePort)}
-	outcome = listenArg.handle()
-	assert.Nil(t, outcome, "Hanlding of listen cmd line arg returned error")
-	assert.Equal(t, config.GlobalConfig.ListenAddress.Host, net.IPv4(127, 0, 0, 1))
-	assert.Equal(t, config.GlobalConfig.ListenAddress.Port, freePort)
-
-	//dont provide a port
-	previousGlobal := config.GlobalConfig.ListenAddress
-	listenArg = listenCmdLineArg{address: "127.0.0.1:"}
-	outcome = listenArg.handle()
-	assert.NotNil(t, outcome, "Hanlding of listen cmd line arg successful while port was not given")
-	assert.Equal(t, outcome.msg, "Error in parsing arg --listen. Invalid port number")
-	assert.Equal(t, outcome.code, CantListenToPortError)
-	assert.Equal(t, previousGlobal, config.GlobalConfig.ListenAddress)
-
-	//provide a negative port number
-	previousGlobal = config.GlobalConfig.ListenAddress
-	listenArg = listenCmdLineArg{address: "127.0.0.1:-1"}
-	outcome = listenArg.handle()
-	assert.NotNil(t, outcome, "Hanlding of invalid port did not result in an error")
-	assert.Equal(t, outcome.msg, "Error in parsing arg --listen. Invalid port number")
-	assert.Equal(t, outcome.code, CantListenToPortError)
-	assert.Equal(t, previousGlobal, config.GlobalConfig.ListenAddress)
-
-	//provide a higher port number than allowed
-	previousGlobal = config.GlobalConfig.ListenAddress
-	listenArg = listenCmdLineArg{address: "127.0.0.1:123456"}
-	outcome = listenArg.handle()
-	assert.NotNil(t, outcome, "Hanlding of high port did not result in an error")
-	assert.Equal(t, outcome.msg, "Error in parsing arg --listen. Invalid port number")
-	assert.Equal(t, outcome.code, CantListenToPortError)
-	assert.Equal(t, previousGlobal, config.GlobalConfig.ListenAddress)
-
-	//provide a non free port
-	port, err := networking.FindFreePort()
-	require.Nil(t, err, "Unexpected error in free port search")
-	listeningAddress := ":" + fmt.Sprint(port)
-	listener, err := net.Listen("tcp", listeningAddress)
-	assert.Nil(t, err, "FindFreePort returned a non free port")
-	defer listener.Close()
-
-	previousGlobal = config.GlobalConfig.ListenAddress
-	listenArg = listenCmdLineArg{address: listeningAddress}
-	outcome = listenArg.handle()
-	assert.NotNil(t, outcome, "Hanlding of used port did not result in an error")
-	assert.Equal(t, outcome.msg, "Error in parsing arg --listen. Port is not free")
-	assert.Equal(t, outcome.code, CantListenToPortError)
-	assert.Equal(t, previousGlobal, config.GlobalConfig.ListenAddress)
-
-	//provide an empty listening address
-	previousGlobal = config.GlobalConfig.ListenAddress
-	listenArg = listenCmdLineArg{}
-	outcome = listenArg.handle()
-	assert.NotNil(t, outcome, "Hanlding of empty listen address did not result in an error")
-	assert.Equal(t, outcome.msg, "Error in arg --listen. Listen address not provided")
-	assert.Equal(t, outcome.code, CantListenToPortError)
-	assert.Equal(t, previousGlobal, config.GlobalConfig.ListenAddress)
 }
 
 func TestSharedFolderCmdLineArgHandling(t *testing.T) {
