@@ -49,7 +49,7 @@ func handleCommandLineArgValues(args []CmdLineArg) *CmdLineArgError {
 func gatherCommandLineArgTemplates() []CmdLineArg {
 	var argTemplates []CmdLineArg
 	argTemplates = append(argTemplates, &helpCmdLineArg{})
-	argTemplates = append(argTemplates, &sharedFolderCmdLineArg{})
+	argTemplates = append(argTemplates, &sharedDirectoryCmdLineArg{})
 	argTemplates = append(argTemplates, &driverCmdLineArg{})
 	return argTemplates
 }
@@ -79,41 +79,41 @@ func createHelpMessage() string {
 	return msg
 }
 
-// Cmd Line Arg: Shared Folder
-type sharedFolderCmdLineArg struct {
-	sharedFolderPath string
+// Cmd Line Arg: Shared Directory
+type sharedDirectoryCmdLineArg struct {
+	sharedDirectoryPath string
 }
 
-func (arg *sharedFolderCmdLineArg) register() {
-	flag.StringVar(&arg.sharedFolderPath, "shared-folder", "", "Shared folder path for Syncers' communication")
+func (arg *sharedDirectoryCmdLineArg) register() {
+	flag.StringVar(&arg.sharedDirectoryPath, "shared-dir", "", "Shared directory path for Syncers' communication")
 }
 
-func (arg *sharedFolderCmdLineArg) handle() *CmdLineArgError {
-	if arg.sharedFolderPath == "" {
-		errorMessage := fmt.Sprintf("Shared folder path cannot be empty")
+func (arg *sharedDirectoryCmdLineArg) handle() *CmdLineArgError {
+	if arg.sharedDirectoryPath == "" {
+		errorMessage := fmt.Sprintf("Shared directory path cannot be empty")
 		logging.Log.Error(errorMessage)
-		return &CmdLineArgError{msg: errorMessage, code: InvalidSharedFolderError}
+		return &CmdLineArgError{msg: errorMessage, code: InvalidSharedDirectoryError}
 	}
 
-	fileInfo, err := os.Stat(arg.sharedFolderPath)
+	fileInfo, err := os.Stat(arg.sharedDirectoryPath)
 	if err != nil {
 		var errorMessage string
 		if os.IsNotExist(err) {
-			errorMessage = fmt.Sprintf("Shared folder path does not exist: %s", arg.sharedFolderPath)
+			errorMessage = fmt.Sprintf("Shared directory path does not exist: %s", arg.sharedDirectoryPath)
 		} else {
-			errorMessage = fmt.Sprintf("Invalid shared folder path: %v", err)
+			errorMessage = fmt.Sprintf("Invalid shared directory path: %v", err)
 		}
 		logging.Log.Error(errorMessage)
-		return &CmdLineArgError{msg: errorMessage, code: InvalidSharedFolderError}
+		return &CmdLineArgError{msg: errorMessage, code: InvalidSharedDirectoryError}
 	}
 
 	if !fileInfo.IsDir() {
-		errorMessage := fmt.Sprintf("Shared folder path does not point to a directory: %s", arg.sharedFolderPath)
+		errorMessage := fmt.Sprintf("Shared directory path does not point to a directory: %s", arg.sharedDirectoryPath)
 		logging.Log.Error(errorMessage)
-		return &CmdLineArgError{msg: errorMessage, code: InvalidSharedFolderError}
+		return &CmdLineArgError{msg: errorMessage, code: InvalidSharedDirectoryError}
 	}
 
-	config.GlobalConfig.SharedFolder = arg.sharedFolderPath
+	config.GlobalConfig.SharedDirectory = arg.sharedDirectoryPath
 	return nil
 }
 

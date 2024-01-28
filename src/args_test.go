@@ -23,8 +23,8 @@ func TestGatherCommandLineArgTemplates(t *testing.T) {
 	assert.True(t, hasCorrectType, fmt.Sprintf("Index %d has unexpected type instead of helpCmdLineArg", index))
 
 	index += 1
-	_, hasCorrectType = args[index].(*sharedFolderCmdLineArg)
-	assert.True(t, hasCorrectType, fmt.Sprintf("Index %d has unexpected type instead of sharedFolderCmdLineArg", index))
+	_, hasCorrectType = args[index].(*sharedDirectoryCmdLineArg)
+	assert.True(t, hasCorrectType, fmt.Sprintf("Index %d has unexpected type instead of sharedDirectoryCmdLineArg", index))
 
 	index += 1
 	_, hasCorrectType = args[index].(*driverCmdLineArg)
@@ -148,44 +148,44 @@ func (arg *failedCmdLineArgMock) handle() *CmdLineArgError {
 	return &CmdLineArgError{msg: "error", code: NormalExit}
 }
 
-func TestSharedFolderCmdLineArgHandling(t *testing.T) {
+func TestSharedDirectoryCmdLineArgHandling(t *testing.T) {
 	logLevel := logging.Log.GetLevel()
 	logging.Log.SetLevel(logrus.FatalLevel)
 	defer logging.Log.SetLevel(logLevel)
 
 	// Empty path
-	sharedFolderArg := sharedFolderCmdLineArg{sharedFolderPath: ""}
-	outcome := sharedFolderArg.handle()
-	previousGlobal := config.GlobalConfig.SharedFolder
+	sharedDirectoryArg := sharedDirectoryCmdLineArg{sharedDirectoryPath: ""}
+	outcome := sharedDirectoryArg.handle()
+	previousGlobal := config.GlobalConfig.SharedDirectory
 	assert.NotNil(t, outcome, "Hanlding of empty path did not result in an error")
-	assert.Equal(t, outcome.msg, "Shared folder path cannot be empty")
-	assert.Equal(t, outcome.code, InvalidSharedFolderError)
-	assert.Equal(t, config.GlobalConfig.SharedFolder, previousGlobal)
+	assert.Equal(t, outcome.msg, "Shared directory path cannot be empty")
+	assert.Equal(t, outcome.code, InvalidSharedDirectoryError)
+	assert.Equal(t, config.GlobalConfig.SharedDirectory, previousGlobal)
 
 	// Invalid path
-	sharedFolderArg = sharedFolderCmdLineArg{sharedFolderPath: "//invalid/path"}
-	outcome = sharedFolderArg.handle()
-	previousGlobal = config.GlobalConfig.SharedFolder
+	sharedDirectoryArg = sharedDirectoryCmdLineArg{sharedDirectoryPath: "//invalid/path"}
+	outcome = sharedDirectoryArg.handle()
+	previousGlobal = config.GlobalConfig.SharedDirectory
 	assert.NotNil(t, outcome, "Hanlding of invalid path did not result in an error")
-	assert.Equal(t, outcome.code, InvalidSharedFolderError)
-	assert.Equal(t, config.GlobalConfig.SharedFolder, previousGlobal)
+	assert.Equal(t, outcome.code, InvalidSharedDirectoryError)
+	assert.Equal(t, config.GlobalConfig.SharedDirectory, previousGlobal)
 
 	// Non directory path
 	tempFile, err := os.CreateTemp("", "temp_file")
 	require.Nil(t, err, "Failed to create temporary file")
 	defer os.Remove(tempFile.Name())
-	sharedFolderArg = sharedFolderCmdLineArg{sharedFolderPath: tempFile.Name()}
-	outcome = sharedFolderArg.handle()
-	previousGlobal = config.GlobalConfig.SharedFolder
+	sharedDirectoryArg = sharedDirectoryCmdLineArg{sharedDirectoryPath: tempFile.Name()}
+	outcome = sharedDirectoryArg.handle()
+	previousGlobal = config.GlobalConfig.SharedDirectory
 	assert.NotNil(t, outcome, "Hanlding of path not pointing to directory did not result in an error")
-	assert.Equal(t, outcome.msg, fmt.Sprintf("Shared folder path does not point to a directory: %s", tempFile.Name()))
-	assert.Equal(t, outcome.code, InvalidSharedFolderError)
-	assert.Equal(t, config.GlobalConfig.SharedFolder, previousGlobal)
+	assert.Equal(t, outcome.msg, fmt.Sprintf("Shared directory path does not point to a directory: %s", tempFile.Name()))
+	assert.Equal(t, outcome.code, InvalidSharedDirectoryError)
+	assert.Equal(t, config.GlobalConfig.SharedDirectory, previousGlobal)
 
 	// Valid directory path
-	tempFolderPath := os.TempDir()
-	sharedFolderArg = sharedFolderCmdLineArg{sharedFolderPath: tempFolderPath}
-	outcome = sharedFolderArg.handle()
-	assert.Nil(t, outcome, "Hanlding of shared folder cmd line arg returned error")
-	assert.Equal(t, config.GlobalConfig.SharedFolder, tempFolderPath)
+	tempDirectoryPath := os.TempDir()
+	sharedDirectoryArg = sharedDirectoryCmdLineArg{sharedDirectoryPath: tempDirectoryPath}
+	outcome = sharedDirectoryArg.handle()
+	assert.Nil(t, outcome, "Hanlding of shared directory cmd line arg returned error")
+	assert.Equal(t, config.GlobalConfig.SharedDirectory, tempDirectoryPath)
 }
