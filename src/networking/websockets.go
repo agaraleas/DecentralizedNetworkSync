@@ -20,22 +20,22 @@ const (
 	websocketMsgSendQueueSize = 10
 )
 
-//WebsocketMsg: Represenets a websocket message that a WebsocketClient can handle
+// WebsocketMsg: Represenets a websocket message that a WebsocketClient can handle
 type WebsocketMsg struct {
-	TransactionId 	uuid.UUID	`json:"transactionId"`
-	MsgType 		string		`json:"msgType"`
-	Payload WebSocketMsgPayload	`json:"payload"`
+	TransactionId uuid.UUID           `json:"transactionId"`
+	MsgType       string              `json:"msgType"`
+	Payload       WebSocketMsgPayload `json:"payload"`
 }
 
-//WebSocketMsgPayload: Represents the custom part of a websocket message that will be sent or read
-//from a remote peer. Should implment basic json marhsall interface
+// WebSocketMsgPayload: Represents the custom part of a websocket message that will be sent or read
+// from a remote peer. Should implment basic json marhsall interface
 type WebSocketMsgPayload interface {
 	Type() string
 	MarshalJSON() ([]byte, error)
 	UnmarshalJSON(data []byte) error
 }
 
-//WebSocketPayloadRegistry: Represent a deposit of message templates that a Websocket Client can handle
+// WebSocketPayloadRegistry: Represent a deposit of message templates that a Websocket Client can handle
 type WebSocketPayloadRegistry struct {
 	payloadTemplates map[string]*WebSocketMsgPayload
 }
@@ -58,37 +58,37 @@ func (r *WebSocketPayloadRegistry) getTemplate(key string) (WebSocketMsgPayload,
 	}
 }
 
-//WebsocketMsgHandler: Represents the object which will do the actual handling when a WebsocketMsg wil
-//be received from a remote peer. Offers also a slot to be called upon disconnection
+// WebsocketMsgHandler: Represents the object which will do the actual handling when a WebsocketMsg wil
+// be received from a remote peer. Offers also a slot to be called upon disconnection
 type WebsocketMsgHandler interface {
 	Handle(ws *WebsocketClient, msg WebsocketMsg) error
 	Disconnecting(ws *WebsocketClient)
 }
 
-//websocketDialer: Abstraction of the dialer to allo mocking for testing purposes
+// websocketDialer: Abstraction of the dialer to allo mocking for testing purposes
 type websocketDialer interface {
 	Dial(urlStr string, requestHeader http.Header) (*websocket.Conn, *http.Response, error)
 }
 
-//wsMsgHandlingRouter: Dispatches a received message to appropriate handler (custom / internal)
+// wsMsgHandlingRouter: Dispatches a received message to appropriate handler (custom / internal)
 type wsMsgHandlingRouter struct {
-	msgHandlers []WebsocketMsgHandler
+	msgHandlers       []WebsocketMsgHandler
 	payloadRegistries []*WebSocketPayloadRegistry
 }
 
-func(h *wsMsgHandlingRouter) dispatch(rawMsg[]byte, msgType string, ws *WebsocketClient) error {
+func (h *wsMsgHandlingRouter) dispatch(rawMsg []byte, msgType string, ws *WebsocketClient) error {
 	for i := 0; i <= maxMsgHandlerIndex; i += 1 {
 		payloadRegistry := h.payloadRegistries[i]
 		payload, found := payloadRegistry.getTemplate(msgType)
 
 		if found {
-			msg := WebsocketMsg { Payload: payload }
+			msg := WebsocketMsg{Payload: payload}
 			err := json.Unmarshal(rawMsg, &msg)
 			if err != nil {
 				ws.logger.Errorf("Failed to unmarshall websocket message %s", rawMsg)
 				return fmt.Errorf("Failed to unmarshall websocket message")
 			}
-			
+
 			allowed, err := ws.trafficController.isAllowed(msg)
 			if !allowed {
 				ws.logger.Warnf("Will not handle received msg '%s' due to Traffic controller. %s", err.Error())
@@ -104,16 +104,17 @@ func(h *wsMsgHandlingRouter) dispatch(rawMsg[]byte, msgType string, ws *Websocke
 	return fmt.Errorf("Failed to handle ws message. Type '%s' unknown to all payload registries", msgType)
 }
 
-const( 
-	customMsgHandlerIndex = 0
+const (
+	customMsgHandlerIndex   = 0
 	internalMsgHandlerIndex = 1
-	maxMsgHandlerIndex = 1
+	maxMsgHandlerIndex      = 1
 )
 
-//wsInternalMsgHandler: Handles internal websocket messages such as Hello, Goodbye etc
+// wsInternalMsgHandler: Handles internal websocket messages such as Hello, Goodbye etc
 type wsInternalMsgHandler struct {
 	goodbyeMsgAckWaiter chan struct{}
 }
+
 func (h *wsInternalMsgHandler) Handle(ws *WebsocketClient, msg WebsocketMsg) error {
 	if _, isGoodbyeMsg := msg.Payload.(*wsGoodByeMsg); isGoodbyeMsg {
 		ws.disconnectNotifyGuard.Do(ws.notifyDisconnection)
@@ -128,9 +129,10 @@ func (h *wsInternalMsgHandler) Handle(ws *WebsocketClient, msg WebsocketMsg) err
 }
 func (h *wsInternalMsgHandler) Disconnecting(ws *WebsocketClient) {}
 
-//wsGoodByeMsg: internal websocket message to notify remote peer for going away
-type wsGoodByeMsg struct {}
-func (msg *wsGoodByeMsg) Type() string { 
+// wsGoodByeMsg: internal websocket message to notify remote peer for going away
+type wsGoodByeMsg struct{}
+
+func (msg *wsGoodByeMsg) Type() string {
 	return "networking/wsGoodByeMsg"
 }
 func (msg *wsGoodByeMsg) MarshalJSON() ([]byte, error) {
@@ -141,9 +143,10 @@ func (msg *wsGoodByeMsg) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-//wsGoodByeMsg: internal websocket message to acknowledge disconnection of a remote peer
-type wsGoodByeMsgAck struct {}
-func (msg *wsGoodByeMsgAck) Type() string { 
+// wsGoodByeMsg: internal websocket message to acknowledge disconnection of a remote peer
+type wsGoodByeMsgAck struct{}
+
+func (msg *wsGoodByeMsgAck) Type() string {
 	return "networking/wsGoodByeMsgAck"
 }
 func (msg *wsGoodByeMsgAck) MarshalJSON() ([]byte, error) {
@@ -154,14 +157,15 @@ func (msg *wsGoodByeMsgAck) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-//wsTrafficController: controls which messages are allowed to be sent
+// wsTrafficController: controls which messages are allowed to be sent
 type wsTrafficController interface {
 	isAllowed(msg WebsocketMsg) (bool, error)
 	isDisconnectionRequested() bool
 }
 
-//wsInactiveTrafficController: implements wsTrafficController when no connection is yet established
-type wsInactiveTrafficController struct {}
+// wsInactiveTrafficController: implements wsTrafficController when no connection is yet established
+type wsInactiveTrafficController struct{}
+
 func (c wsInactiveTrafficController) isAllowed(msg WebsocketMsg) (bool, error) {
 	return false, fmt.Errorf("Websocket connection not established")
 }
@@ -170,8 +174,9 @@ func (c wsInactiveTrafficController) isDisconnectionRequested() bool {
 	return false
 }
 
-//wsUpTrafficController: implements wsTrafficController when connection is established
-type wsUpTrafficController struct {}
+// wsUpTrafficController: implements wsTrafficController when connection is established
+type wsUpTrafficController struct{}
+
 func (c wsUpTrafficController) isAllowed(msg WebsocketMsg) (bool, error) {
 	return true, nil
 }
@@ -180,11 +185,12 @@ func (c wsUpTrafficController) isDisconnectionRequested() bool {
 	return false
 }
 
-//wsUpTrafficController: implements wsTrafficController when connection is established
-type wsDisconnectingTrafficController struct {}
+// wsUpTrafficController: implements wsTrafficController when connection is established
+type wsDisconnectingTrafficController struct{}
+
 func (c wsDisconnectingTrafficController) isAllowed(msg WebsocketMsg) (bool, error) {
 	allowed := msg.MsgType == typeOfPayload(&wsGoodByeMsg{}) ||
-			   msg.MsgType == typeOfPayload(&wsGoodByeMsgAck{})
+		msg.MsgType == typeOfPayload(&wsGoodByeMsgAck{})
 
 	if allowed {
 		return true, nil
@@ -197,30 +203,38 @@ func (c wsDisconnectingTrafficController) isDisconnectionRequested() bool {
 	return true
 }
 
-//typeOfPayload: return type of payload as a string for readability purposes
+// typeOfPayload: return type of payload as a string for readability purposes
 func typeOfPayload(payload WebSocketMsgPayload) string {
 	return payload.Type()
 }
 
-//WebsocketClient: Represents the facade which handles websocket communication to a remote peer
+// AbstractWebsocketClient: Defines methods for interacting with a WebSocketClient.
+type AbstractWebsocketClient interface {
+	Connect(serverUrl string) error
+	Disconnect()
+	Send(payload WebSocketMsgPayload)
+	Reply(payload WebSocketMsgPayload, rx WebsocketMsg)
+}
+
+// WebsocketClient: Represents the facade which handles websocket communication to a remote peer
 type WebsocketClient struct {
-	msgHandleRouter wsMsgHandlingRouter
-	conn *websocket.Conn
-	dialer websocketDialer
-	logger logging.AbstractLogger
-	trafficController wsTrafficController
-	interruptChannel chan os.Signal
-	sendChannel chan WebsocketMsg
-	doneChannel chan bool
+	msgHandleRouter       wsMsgHandlingRouter
+	conn                  *websocket.Conn
+	dialer                websocketDialer
+	logger                logging.AbstractLogger
+	trafficController     wsTrafficController
+	interruptChannel      chan os.Signal
+	sendChannel           chan WebsocketMsg
+	doneChannel           chan bool
 	disconnectNotifyGuard sync.Once
-	connCloserGuard sync.Once
+	connCloserGuard       sync.Once
 }
 
 func createMsgHandlingRouterForWsClient(customMsgHandler WebsocketMsgHandler,
-										customPayloadRegistry *WebSocketPayloadRegistry) wsMsgHandlingRouter {
+	customPayloadRegistry *WebSocketPayloadRegistry) wsMsgHandlingRouter {
 
 	msgHandlerRouter := wsMsgHandlingRouter{msgHandlers: make([]WebsocketMsgHandler, 2),
-											payloadRegistries: make([]*WebSocketPayloadRegistry, 2),
+		payloadRegistries: make([]*WebSocketPayloadRegistry, 2),
 	}
 
 	msgHandlerRouter.msgHandlers[customMsgHandlerIndex] = customMsgHandler
@@ -236,23 +250,22 @@ func createMsgHandlingRouterForWsClient(customMsgHandler WebsocketMsgHandler,
 	return msgHandlerRouter
 }
 
-func CreateWebsocketClient(msgHandler WebsocketMsgHandler, 
-						   payloadRegistry *WebSocketPayloadRegistry) *WebsocketClient {
-	
-	
+func CreateWebsocketClient(msgHandler WebsocketMsgHandler,
+	payloadRegistry *WebSocketPayloadRegistry) *WebsocketClient {
+
 	wsClient := &WebsocketClient{msgHandleRouter: createMsgHandlingRouterForWsClient(msgHandler, payloadRegistry),
-		interruptChannel: make(chan os.Signal, 1),
-		sendChannel: make(chan WebsocketMsg, websocketMsgSendQueueSize),
-		doneChannel: make(chan bool),
-		dialer: websocket.DefaultDialer,
-		logger: logging.Log,
+		interruptChannel:  make(chan os.Signal, 1),
+		sendChannel:       make(chan WebsocketMsg, websocketMsgSendQueueSize),
+		doneChannel:       make(chan bool),
+		dialer:            websocket.DefaultDialer,
+		logger:            logging.Log,
 		trafficController: wsInactiveTrafficController{},
 	}
-	
+
 	signal.Notify(wsClient.interruptChannel, os.Interrupt, syscall.SIGTERM)
 	signal.Notify(wsClient.interruptChannel, os.Interrupt, syscall.SIGKILL)
 	signal.Notify(wsClient.interruptChannel, os.Interrupt, syscall.SIGINT)
-	
+
 	return wsClient
 }
 
@@ -288,7 +301,7 @@ func waitForGoodbyeAck(waitChann chan struct{}, timeout time.Duration) bool {
 	}
 }
 
-func scheduleForcefulDisconnection(ws *WebsocketClient, timeout time.Duration){
+func scheduleForcefulDisconnection(ws *WebsocketClient, timeout time.Duration) {
 	//Disconnect forcefully if other peer does not acknowledge closing of connection after 1 sec
 	//Since disconnectin is protected by Once syncer, I will shedule a disconnetion which
 	//will run only if readPump does not receive a graceful connection close in the meantime
@@ -301,7 +314,7 @@ func scheduleForcefulDisconnection(ws *WebsocketClient, timeout time.Duration){
 	}()
 }
 
-func closeWsConnectionGracefully(conn *websocket.Conn){
+func closeWsConnectionGracefully(conn *websocket.Conn) {
 	closeMessage := websocket.FormatCloseMessage(websocket.CloseGoingAway, "")
 	conn.WriteMessage(websocket.CloseMessage, closeMessage)
 }
@@ -313,26 +326,26 @@ func (ws *WebsocketClient) Disconnect() {
 	ws.Send(goodbyeMsg)
 
 	internalMsgHandler := ws.msgHandleRouter.msgHandlers[internalMsgHandlerIndex].(*wsInternalMsgHandler)
-	acknowledged := waitForGoodbyeAck(internalMsgHandler.goodbyeMsgAckWaiter, 5 * time.Second)
+	acknowledged := waitForGoodbyeAck(internalMsgHandler.goodbyeMsgAckWaiter, 5*time.Second)
 
 	ws.disconnectNotifyGuard.Do(ws.notifyDisconnection)
-	
-	scheduleForcefulDisconnection(ws, 1 *time.Second)
+
+	scheduleForcefulDisconnection(ws, 1*time.Second)
 	if acknowledged {
 		closeWsConnectionGracefully(ws.conn)
 	}
 }
 
-func (ws *WebsocketClient) Send(payload WebSocketMsgPayload){
-	msg := WebsocketMsg {TransactionId: uuid.New(), 
+func (ws *WebsocketClient) Send(payload WebSocketMsgPayload) {
+	msg := WebsocketMsg{TransactionId: uuid.New(),
 		MsgType: payload.Type(),
 		Payload: payload,
 	}
 	ws.sendChannel <- msg
 }
 
-func (ws *WebsocketClient) Reply(payload WebSocketMsgPayload, rx WebsocketMsg){
-	msg := WebsocketMsg {TransactionId: rx.TransactionId, 
+func (ws *WebsocketClient) Reply(payload WebSocketMsgPayload, rx WebsocketMsg) {
+	msg := WebsocketMsg{TransactionId: rx.TransactionId,
 		MsgType: payload.Type(),
 		Payload: payload,
 	}
@@ -341,9 +354,9 @@ func (ws *WebsocketClient) Reply(payload WebSocketMsgPayload, rx WebsocketMsg){
 
 func (ws *WebsocketClient) handleReceivedMsg(txt []byte) {
 	var typeReader struct {
-		Value  string	`json:"msgType"`
+		Value string `json:"msgType"`
 	}
-	
+
 	err := json.Unmarshal(txt, &typeReader)
 	if err != nil {
 		ws.logger.Errorf("Failed to unmarshall type of websocket message %s", txt)
@@ -395,13 +408,13 @@ func (ws *WebsocketClient) writePump() {
 				ws.logger.Debugf("Received not ok in send channel of WebSocket client for ws connection %p", ws.conn)
 				return
 			}
-			
+
 			res := ws.sendMsg(msg)
 			if res == wsSendInternalError {
 				ws.logger.Debugf("Stopping write pump of WebSocket client for ws connection %p", ws.conn)
 				return
 			}
-		
+
 		case <-ws.interruptChannel:
 		case <-ws.doneChannel:
 			ws.logger.Debugf("Received done for ws connection %p", ws.conn)
@@ -413,7 +426,7 @@ func (ws *WebsocketClient) writePump() {
 func (ws *WebsocketClient) notifyDisconnection() {
 	ws.logger.Debugf("Handling websocket disconnection of conn %p", ws.conn)
 
-	for _, msgHandler := range(ws.msgHandleRouter.msgHandlers) {
+	for _, msgHandler := range ws.msgHandleRouter.msgHandlers {
 		msgHandler.Disconnecting(ws)
 	}
 }
@@ -429,6 +442,7 @@ func (ws *WebsocketClient) closeConnection() {
 }
 
 type msgSendingResult int
+
 const (
 	msgSuccessfullySent msgSendingResult = iota
 	notAllowedMessageSendError
@@ -444,7 +458,7 @@ func (ws *WebsocketClient) sendMsg(msg WebsocketMsg) msgSendingResult {
 		ws.logger.Warnf("Disregarding '%s' msg with transaction Id %s. Traffic controller replied: %s", err.Error())
 		return notAllowedMessageSendError
 	}
-	
+
 	json, err := json.Marshal(msg)
 	if err != nil {
 		ws.logger.Errorf("Failed to marshal WebSocket msg of type %s to json", msg.MsgType)
