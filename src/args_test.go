@@ -3,13 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"testing"
 
 	"github.com/agaraleas/DecentralizedNetworkSync/config"
 	"github.com/agaraleas/DecentralizedNetworkSync/logging"
-	"github.com/agaraleas/DecentralizedNetworkSync/networking"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,8 +25,8 @@ func TestGatherCommandLineArgTemplates(t *testing.T) {
 	assert.True(t, hasCorrectType, fmt.Sprintf("Index %d has unexpected type instead of sharedDirectoryCmdLineArg", index))
 
 	index += 1
-	_, hasCorrectType = args[index].(*driverCmdLineArg)
-	assert.True(t, hasCorrectType, fmt.Sprintf("Index %d has unexpected type instead of driverCmdLineArg", index))
+	_, hasCorrectType = args[index].(*driverUrlCmdLineArg)
+	assert.True(t, hasCorrectType, fmt.Sprintf("Index %d has unexpected type instead of driverUrlCmdLineArg", index))
 
 	assert.Equal(t, len(args), index+1) //So as when adding a new cmd line arg, not forget to add a test
 }
@@ -53,72 +51,105 @@ func TestHelpCmdLineArgHandling(t *testing.T) {
 	assert.Nil(t, outcome, "Hanlding of help cmd line arg returned error althogh help not requested")
 }
 
-func TestDriverCmdLineArgRegistering(t *testing.T) {
-	require.Nil(t, flag.Lookup("driver-host"), "Cannot proceed in actual test of registering. --driver-host already exists")
-	require.Nil(t, flag.Lookup("driver-port"), "Cannot proceed in actual test of registering. --driver-port already exists")
-	require.Nil(t, flag.Lookup("driver-ticket"), "Cannot proceed in actual test of registering. --driver-ticket already exists")
-	driverArg := driverCmdLineArg{}
-	driverArg.register()
-	assert.NotNil(t, flag.Lookup("driver-host"), "Failed to register --driver-host flag")
-	assert.NotNil(t, flag.Lookup("driver-port"), "Failed to register --driver-port flag")
-	assert.NotNil(t, flag.Lookup("driver-ticket"), "Failed to register --driver-ticket flag")
+func TestdriverUrlCmdLineArgRegistering(t *testing.T) {
+	require.Nil(t, flag.Lookup("driver-url"), "Cannot proceed in actual test of registering. --driver-url already exists")
+	driverUrlArg := driverUrlCmdLineArg{}
+	driverUrlArg.register()
+	assert.NotNil(t, flag.Lookup("driver-url"), "Failed to register --driver-url flag")
 }
-func TestDriverCmdLineArgHandling(t *testing.T) {
+func TestdriverUrlCmdLineArgHandling(t *testing.T) {
 	logLevel := logging.Log.GetLevel()
 	logging.Log.SetLevel(logrus.FatalLevel)
 	defer logging.Log.SetLevel(logLevel)
 
-	//Valid driver case
-	driverArg := driverCmdLineArg{host: "127.0.0.1", port: 12345, ticket: "abcd"}
-	outcome := driverArg.handle()
+	//Valid driver url with Ip case
+	url := "ws://127.0.0.1:8080"
+	driverUrlArg := driverUrlCmdLineArg{websocketServerUrl: url}
+	outcome := driverUrlArg.handle()
 	assert.Nil(t, outcome, "Hanlding of driver cmd line arg returned error")
-	assert.Equal(t, config.GlobalConfig.DriverInfo.Address.Host, net.IPv4(127, 0, 0, 1))
-	assert.Equal(t, config.GlobalConfig.DriverInfo.Address.Port, networking.Port(12345))
-	assert.Equal(t, config.GlobalConfig.DriverInfo.Ticket, "abcd")
+	assert.Equal(t, config.GlobalConfig.DriverUrl, url)
 
-	//Invalid host
-	previousDriver := config.GlobalConfig.DriverInfo
-	driverArg = driverCmdLineArg{host: "285.0.0.1", port: 23456, ticket: "qwerty"}
-	outcome = driverArg.handle()
-	require.NotNil(t, outcome, "Expected error in handling of invalid host but got nil")
-	assert.Equal(t, outcome.msg, "Error in parsing arg --driver-host. Invalid host: 285.0.0.1")
-	assert.Equal(t, outcome.code, InvalidHostError)
-	assert.Equal(t, config.GlobalConfig.DriverInfo, previousDriver)
+	//Valid secure driver url with Ip case
+	url = "wss://127.0.0.1:8080"
+	driverUrlArg = driverUrlCmdLineArg{websocketServerUrl: url}
+	outcome = driverUrlArg.handle()
+	assert.Nil(t, outcome, "Hanlding of driver cmd line arg returned error")
+	assert.Equal(t, config.GlobalConfig.DriverUrl, url)
+
+	//Valid secure driver url with hostname case
+	url = "wss://localhost:8080"
+	driverUrlArg = driverUrlCmdLineArg{websocketServerUrl: url}
+	outcome = driverUrlArg.handle()
+	assert.Nil(t, outcome, "Hanlding of driver cmd line arg returned error")
+	assert.Equal(t, config.GlobalConfig.DriverUrl, url)
 
 	//Empty host
-	previousDriver = config.GlobalConfig.DriverInfo
-	driverArg = driverCmdLineArg{host: "localhost", port: 12345, ticket: "abcd"}
-	outcome = driverArg.handle()
+	url = "ws://:8080"
+	previousDriverUrl := config.GlobalConfig.DriverUrl
+	driverUrlArg = driverUrlCmdLineArg{websocketServerUrl: url}
+	outcome = driverUrlArg.handle()
+	require.NotNil(t, outcome, "Expected error in handling of invalid host but got nil")
+	assert.Equal(t, outcome.msg, "Error in parsing arg --driver-url. Empty host")
+	assert.Equal(t, outcome.code, InvalidDriverUrlError)
+	assert.Equal(t, config.GlobalConfig.DriverUrl, previousDriverUrl)
+
+	//Invalid hostname
+	url = "ws://invalidhost:8080"
+	previousDriverUrl = config.GlobalConfig.DriverUrl
+	driverUrlArg = driverUrlCmdLineArg{websocketServerUrl: url}
+	outcome = driverUrlArg.handle()
+	require.NotNil(t, outcome, "Expected error in handling of invalid host but got nil")
+	assert.Equal(t, outcome.msg, "Error in parsing arg --driver-url. Invalid host: invalidhost")
+	assert.Equal(t, outcome.code, InvalidDriverUrlError)
+	assert.Equal(t, config.GlobalConfig.DriverUrl, previousDriverUrl)
+
+	//Invalid host Ip
+	url = "ws://285.0.0.1:8080"
+	previousDriverUrl = config.GlobalConfig.DriverUrl
+	driverUrlArg = driverUrlCmdLineArg{websocketServerUrl: url}
+	outcome = driverUrlArg.handle()
+	require.NotNil(t, outcome, "Expected error in handling of invalid host but got nil")
+	assert.Equal(t, outcome.msg, "Error in parsing arg --driver-url. Invalid host: 285.0.0.1")
+	assert.Equal(t, outcome.code, InvalidDriverUrlError)
+	assert.Equal(t, config.GlobalConfig.DriverUrl, previousDriverUrl)
+
+	//Empty url
+	url = ""
+	previousDriverUrl = config.GlobalConfig.DriverUrl
+	driverUrlArg = driverUrlCmdLineArg{websocketServerUrl: url}
+	outcome = driverUrlArg.handle()
 	assert.Nil(t, outcome, "Hanlding of driver cmd line arg returned error")
-	assert.Equal(t, net.IPv4(127, 0, 0, 1), config.GlobalConfig.DriverInfo.Address.Host)
-	assert.Equal(t, networking.Port(12345), config.GlobalConfig.DriverInfo.Address.Port)
-	assert.Equal(t, "abcd", config.GlobalConfig.DriverInfo.Ticket)
+	assert.Equal(t, config.GlobalConfig.DriverUrl, previousDriverUrl)
 
 	//Negative port
-	previousDriver = config.GlobalConfig.DriverInfo
-	driverArg = driverCmdLineArg{host: "127.0.0.1", port: -1, ticket: "qwerty"}
-	outcome = driverArg.handle()
+	url = "ws://127.0.0.1:-1"
+	previousDriverUrl = config.GlobalConfig.DriverUrl
+	driverUrlArg = driverUrlCmdLineArg{websocketServerUrl: url}
+	outcome = driverUrlArg.handle()
 	require.NotNil(t, outcome, "Expected error in handling of invalid port but got nil")
-	assert.Equal(t, outcome.msg, "Error in parsing arg --driver-port. Invalid port: -1")
-	assert.Equal(t, outcome.code, InvalidPortError)
-	assert.Equal(t, config.GlobalConfig.DriverInfo, previousDriver)
+	assert.Equal(t, outcome.msg, "Error in parsing arg --driver-url. Invalid port: -1")
+	assert.Equal(t, outcome.code, InvalidDriverUrlError)
+	assert.Equal(t, config.GlobalConfig.DriverUrl, previousDriverUrl)
 
 	//High port
-	previousDriver = config.GlobalConfig.DriverInfo
-	driverArg = driverCmdLineArg{host: "127.0.0.1", port: 123456, ticket: "qwerty"}
-	outcome = driverArg.handle()
+	url = "ws://127.0.0.1:65536"
+	previousDriverUrl = config.GlobalConfig.DriverUrl
+	driverUrlArg = driverUrlCmdLineArg{websocketServerUrl: url}
+	outcome = driverUrlArg.handle()
 	require.NotNil(t, outcome, "Expected error in handling of invalid port but got nil")
-	assert.Equal(t, outcome.msg, "Error in parsing arg --driver-port. Invalid port: 123456")
-	assert.Equal(t, outcome.code, InvalidPortError)
-	assert.Equal(t, config.GlobalConfig.DriverInfo, previousDriver)
+	assert.Equal(t, outcome.msg, "Error in parsing arg --driver-url. Invalid port: 65536")
+	assert.Equal(t, outcome.code, InvalidDriverUrlError)
+	assert.Equal(t, config.GlobalConfig.DriverUrl, previousDriverUrl)
 
-	//Empty ticket - allowed
-	driverArg = driverCmdLineArg{host: "192.168.1.200", port: 55555}
-	outcome = driverArg.handle()
-	assert.Nil(t, outcome, "Error in parsing arg --driver-ticket. Hanlding of driver cmd line arg returned error")
-	assert.Equal(t, config.GlobalConfig.DriverInfo.Address.Host, net.IPv4(192, 168, 1, 200))
-	assert.Equal(t, config.GlobalConfig.DriverInfo.Ticket, "")
-	assert.Equal(t, config.GlobalConfig.DriverInfo.Address.Port, networking.Port(55555))
+	//Non integer port
+	url = "ws://127.0.0.1:a123"
+	previousDriverUrl = config.GlobalConfig.DriverUrl
+	driverUrlArg = driverUrlCmdLineArg{websocketServerUrl: url}
+	outcome = driverUrlArg.handle()
+	require.NotNil(t, outcome, "Expected error in handling of invalid port but got nil")
+	assert.Equal(t, outcome.msg, "Error in parsing arg --driver-url. Invalid port: a123")
+	assert.Equal(t, outcome.code, InvalidDriverUrlError)
+	assert.Equal(t, config.GlobalConfig.DriverUrl, previousDriverUrl)
 }
 
 func TestHandleCommandLineArgValues(t *testing.T) {
